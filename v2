@@ -1,0 +1,73 @@
+import re
+from telethon import TelegramClient, events
+
+
+# Function to extract contract address from message
+def extract_contract_address(message_text):
+    match = re.search(r'[a-zA-Z0-9]{30,50}', message_text)
+    if match:
+        return match.group(0)
+    return None
+
+
+async def main():
+    # Your Telegram API credentials
+    api_id = %%
+    api_hash = '%%'
+    phone_number = '%%'  # Format: '+CountryCodePhoneNumber'
+
+    # Initialize the Telegram client
+    client = TelegramClient('session_name', api_id, api_hash)
+
+    # Connect to Telegram
+    await client.start(phone=phone_number)
+
+    source_chat_id = -1002075630283  # Source chat ID
+    destination_channel_username = '@soul_scanner_bot'  # Destination channel username
+    backup_channel_id = %%  # Backup channel ID
+
+    # Get the current bot's user ID
+    bot_user = await client.get_me()
+    bot_user_id = bot_user.id
+
+    # Function to handle replies in the destination chat
+    @client.on(events.NewMessage(chats=destination_channel_username))
+    async def reply_handler(event):
+        if event.is_reply:
+            original_message = await event.get_reply_message()
+            if original_message.sender_id == bot_user_id:
+                print(f"Reply message in destination chat: {event.text}")
+                # Check for red alert emoji separately
+                if '🚨' in event.raw_text:
+                    print("Message contains 🚨 emoji, skipping backup forwarding.")
+                else:
+                    # If the reply message does not contain 🚨, send the contract address to backup channel
+                    await client.send_message(backup_channel_id, original_message.text)
+                    print(f"Contract address {original_message.text} sent to backup channel.")
+
+    # Set up event handler for new messages in the source chat
+    @client.on(events.NewMessage(chats=source_chat_id))
+    async def handler(event):
+        if "Token info updated" in event.raw_text:
+            print(f"Message received in source chat: {event.raw_text}")
+
+            contract_address = extract_contract_address(event.raw_text)
+            if contract_address:
+                print(f"Extracted contract address: {contract_address}")
+
+                try:
+                    # Forward the contract address to the destination channel
+                    await client.send_message(destination_channel_username, contract_address)
+                    print(f"Contract address {contract_address} forwarded to destination channel.")
+
+                except Exception as e:
+                    print(f"Error sending message to destination channel: {e}")
+
+    print("Listening for new messages in the source chat...")
+    await client.run_until_disconnected()
+
+
+if __name__ == '__main__':
+    import asyncio
+
+    asyncio.run(main())
